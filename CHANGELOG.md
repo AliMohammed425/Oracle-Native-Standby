@@ -1,5 +1,12 @@
 # Changelog
 
+## v37
+
+- Changed the toolkit execution user from `ops` to `opc`.
+- Added automatic target provisioning order: `dbaascli`, `dbcli`, then DBCA.
+- Added managed `dbaascli` placeholder creation instead of blocking it.
+- Added native DBCA fallback when OCI lifecycle utilities are unavailable.
+
 ## v36
 
 - Added explicit interactive and non-interactive execution for every individual process.

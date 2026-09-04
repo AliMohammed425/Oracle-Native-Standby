@@ -200,7 +200,7 @@ Non-interactive input switches:
   -R, --target-service SERVICE
 
   -m, --method ACTIVE_DUPLICATE|OFFLINE_BACKUP
-  -p, --platform AUTO|BASE_DB_SERVICE_DBCLI|GENERIC_OCI_OR_SELF_MANAGED
+  -p, --platform AUTO|DBAASCLI_PLATFORM|BASE_DB_SERVICE_DBCLI|DBCA_PLATFORM
   --source-os-user USER
   --target-os-user USER
   --target-provision-user USER

@@ -66,8 +66,8 @@ DG_ARCHIVE_DEST_ID=
 
 
 # Operator security policy
-# Run the toolkit as ops. Database SSH is performed as oracle.
-TOOLKIT_OS_USER=ops
+# Run the toolkit as opc. Database operations use the oracle software owner.
+TOOLKIT_OS_USER=opc
 ORACLE_OS_USER=oracle
 REQUIRE_LOCAL_SUDO_ORACLE=YES
 REQUIRE_TARGET_ORACLE_SSH=YES

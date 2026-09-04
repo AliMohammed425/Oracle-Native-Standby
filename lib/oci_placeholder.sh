@@ -3,7 +3,7 @@ set -euo pipefail
 
 oci_placeholder_detect_platform(){
   local user="${TARGET_PROVISION_OS_USER:-opc}"
-  ssh "$user@$TARGET_HOST" "if [ -x /opt/oracle/dcs/bin/dbcli ]; then echo BASE_DB_SERVICE_DBCLI; elif command -v dbaascli >/dev/null 2>&1 || [ -x /var/opt/oracle/dbaascli/dbaascli ]; then echo DBAASCLI_PLATFORM; else echo GENERIC_OCI_OR_SELF_MANAGED; fi"
+  ssh "$user@$TARGET_HOST" "if command -v dbaascli >/dev/null 2>&1 || [ -x /var/opt/oracle/dbaascli/dbaascli ]; then echo DBAASCLI_PLATFORM; elif [ -x /opt/oracle/dcs/bin/dbcli ]; then echo BASE_DB_SERVICE_DBCLI; else echo DBCA_PLATFORM; fi"
 }
 
 oci_placeholder_validate_inputs(){
@@ -68,6 +68,55 @@ oci_placeholder_base_dbservice_wait(){
   done
 }
 
+oci_placeholder_dbaascli(){
+  local ssh_user="${TARGET_PROVISION_OS_USER:-opc}" tool cdb="false"
+  [[ "${SOURCE_IS_CDB:-YES}" == "YES" ]] && cdb="true"
+  tool="$(ssh "$ssh_user@$TARGET_HOST" "command -v dbaascli 2>/dev/null || test ! -x /var/opt/oracle/dbaascli/dbaascli || echo /var/opt/oracle/dbaascli/dbaascli")"
+  [[ -n "$tool" ]] || die "dbaascli was selected but could not be resolved on target."
+  log "Creating target placeholder with dbaascli: $tool"
+  ssh "$ssh_user@$TARGET_HOST" "sudo -n '$tool' database create --dbname '$SOURCE_DB_NAME' --dbUniqueName '$TARGET_DB_UNIQUE_NAME' --oracleHome '$TARGET_ORACLE_HOME' --createAsCDB '$cdb' --datafileDestination '${TARGET_DB_CREATE_FILE_DEST:-+DATA}' --fraDestination '${TARGET_DB_RECOVERY_FILE_DEST:-+RECO}' --waitForCompletion true"
+  ssh "$ssh_user@$TARGET_HOST" "sudo -n -u oracle env ORACLE_HOME='$TARGET_ORACLE_HOME' ORACLE_SID='$TARGET_SID' PATH='$TARGET_ORACLE_HOME/bin':\$PATH '$TARGET_ORACLE_HOME/bin/sqlplus' -s '/ as sysdba' <<'SQL'
+whenever sqlerror exit failure
+alter system set db_unique_name='$TARGET_DB_UNIQUE_NAME' scope=spfile;
+shutdown immediate;
+startup nomount;
+exit
+SQL"
+}
+
+oci_placeholder_dbca(){
+  local ssh_user="${TARGET_PROVISION_OS_USER:-opc}" cdb="false"
+  require_var TARGET_ADMIN_PASSWORD
+  [[ "${SOURCE_IS_CDB:-YES}" == "YES" ]] && cdb="true"
+  log "dbaascli and dbcli were not found; creating target placeholder with DBCA."
+  local td; td="$(mktemp -d /tmp/ons_dbca.XXXXXX)"; trap 'rm -rf "$td"' RETURN
+  cat > "$td/dbca.rsp" <<EOF
+responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v19.0.0
+gdbName=$SOURCE_DB_NAME
+sid=$TARGET_SID
+databaseConfigType=SI
+createAsContainerDatabase=$cdb
+templateName=General_Purpose.dbc
+sysPassword=$TARGET_ADMIN_PASSWORD
+systemPassword=$TARGET_ADMIN_PASSWORD
+storageType=ASM
+datafileDestination=${TARGET_DB_CREATE_FILE_DEST:-+DATA}
+recoveryAreaDestination=${TARGET_DB_RECOVERY_FILE_DEST:-+RECO}
+characterSet=AL32UTF8
+nationalCharacterSet=AL16UTF16
+EOF
+  chmod 600 "$td/dbca.rsp"
+  scp -q "$td/dbca.rsp" "$ssh_user@$TARGET_HOST:/tmp/ons_dbca.rsp"
+  ssh "$ssh_user@$TARGET_HOST" "chmod 600 /tmp/ons_dbca.rsp; sudo -n -u oracle env ORACLE_HOME='$TARGET_ORACLE_HOME' PATH='$TARGET_ORACLE_HOME/bin':\$PATH '$TARGET_ORACLE_HOME/bin/dbca' -silent -createDatabase -responseFile /tmp/ons_dbca.rsp; rc=\$?; sudo -n -u oracle env ORACLE_HOME='$TARGET_ORACLE_HOME' ORACLE_SID='$TARGET_SID' PATH='$TARGET_ORACLE_HOME/bin':\$PATH '$TARGET_ORACLE_HOME/bin/sqlplus' -s '/ as sysdba' <<'SQL'
+whenever sqlerror exit failure
+alter system set db_unique_name='$TARGET_DB_UNIQUE_NAME' scope=spfile;
+shutdown immediate;
+startup nomount;
+exit
+SQL
+rm -f /tmp/ons_dbca.rsp; exit \$rc"
+}
+
 oci_placeholder_generic(){
   local pfile="/tmp/init${TARGET_SID}.ora"
   ssh "$TARGET_OS_USER@$TARGET_HOST" "cat > '$pfile' <<EOF2
@@ -109,9 +158,9 @@ oci_placeholder_create(){
   RESOLVED_OCI_PLATFORM="$platform"; export RESOLVED_OCI_PLATFORM
   echo "OCI target platform: $platform"
   case "$platform" in
+    DBAASCLI_PLATFORM) oci_placeholder_dbaascli ;;
     BASE_DB_SERVICE_DBCLI) oci_placeholder_base_dbservice; oci_placeholder_base_dbservice_wait ;;
-    GENERIC_OCI_OR_SELF_MANAGED) oci_placeholder_generic ;;
-    DBAASCLI_PLATFORM) die "dbaascli-managed target detected; automatic placeholder creation is intentionally blocked until a platform-approved dbaascli lifecycle is configured." ;;
+    DBCA_PLATFORM|GENERIC_OCI_OR_SELF_MANAGED) oci_placeholder_dbca ;;
     *) die "Unsupported OCI_TARGET_PLATFORM=$platform" ;;
   esac
   oci_placeholder_verify

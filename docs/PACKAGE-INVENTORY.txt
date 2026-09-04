@@ -32,9 +32,5 @@ lib/security.sh
 lib/task_select.sh
 lib/workflow.sh
 logs/.gitkeep
-reports/help_smoke_v26.txt
-reports/package_sha256_manifest_v26.txt
-reports/package_validation_v26.txt
-reports/plan_v26.txt
 runs/.gitkeep
 tests/selftest.sh

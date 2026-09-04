@@ -6,6 +6,7 @@ Oracle-Native-Standby automates creation and operation of Oracle physical standb
 
 - Interactive and non-interactive standby build workflows
 - Guided three-phase menu: target placeholder, primary setup, and target standby build
+- Target placeholder engine selection: `dbaascli` first, `dbcli` second, and native `dbca` fallback
 - RMAN active duplicate and offline backup/restore methods
 - OCI placeholder database creation and validation
 - Data Guard configuration, health checks, synchronization, switchover, and failover readiness
@@ -33,6 +34,8 @@ The interactive menu clears and redraws the screen, and exposes the build in ope
 2. Prepare the primary database for Data Guard.
 3. Build and validate the physical standby on the target.
 4. Run the complete end-to-end build.
+
+Run the toolkit as `opc`. With `OCI_TARGET_PLATFORM=AUTO`, target provisioning checks for `dbaascli`, then `/opt/oracle/dcs/bin/dbcli`, and uses `$TARGET_ORACLE_HOME/bin/dbca` when neither lifecycle utility exists.
 
 Run all tasks in the background:
 

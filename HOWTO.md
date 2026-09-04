@@ -20,6 +20,8 @@ The configuration covers source and target database identities, hosts, Oracle ho
 
 The main menu follows the required build order: target placeholder creation, primary database preparation, and physical standby build on the target. Each phase can run in the foreground or background.
 
+The required toolkit user is `opc`. Automatic target placeholder provisioning selects `dbaascli` when installed, otherwise `dbcli`, and finally native DBCA when neither command exists.
+
 Target TDE tablespace encryption provides two guarded modes: `TARGET_ONLINE_AFTER_SWITCHOVER` for a target that is already primary and open read-write, and `TARGET_OFFLINE_AFTER_BUILD` for mounted target-standby datafile encryption. The source database is never encrypted by these functions.
 
 ## 3. Review the plan

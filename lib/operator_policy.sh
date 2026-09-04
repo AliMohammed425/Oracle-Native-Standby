@@ -2,7 +2,7 @@
 set -euo pipefail
 
 operator_policy_defaults(){
-  TOOLKIT_OS_USER="${TOOLKIT_OS_USER:-ops}"
+  TOOLKIT_OS_USER="${TOOLKIT_OS_USER:-opc}"
   ORACLE_OS_USER="${ORACLE_OS_USER:-oracle}"
   TARGET_OS_USER="${TARGET_OS_USER:-oracle}"
   SOURCE_OS_USER="${SOURCE_OS_USER:-oracle}"

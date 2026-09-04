@@ -92,9 +92,9 @@ collect_full_build_inputs(){
   echo
   echo "OCI PLATFORM"
   echo "------------"
-  echo "AUTO detects OCI Base Database Service dbcli when available."
+  echo "AUTO checks dbaascli first, then dbcli, then falls back to DBCA."
   prompt_choice OCI_TARGET_PLATFORM "OCI target platform" \
-    "AUTO|BASE_DB_SERVICE_DBCLI|GENERIC_OCI_OR_SELF_MANAGED" "AUTO"
+    "AUTO|DBAASCLI_PLATFORM|BASE_DB_SERVICE_DBCLI|DBCA_PLATFORM" "AUTO"
 
   if [[ "$OCI_TARGET_PLATFORM" == "BASE_DB_SERVICE_DBCLI" || "$OCI_TARGET_PLATFORM" == "AUTO" ]]; then
     echo
