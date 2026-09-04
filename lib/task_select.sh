@@ -34,13 +34,14 @@ cat <<'EOF'
 22|090|ensure_standby_redo_logs
 23|100|RAC_validation_and_enablement
 24|101|RAC_enable_and_fix
-25|110|Data_Guard_health
-26|120|Data_Guard_sync
-27|130|snapshot_readiness
-28|140|switchover_readiness
-29|150|failover_readiness
-30|160|final_validation_report
-31|170|final_validation_gate
+25|105|offline_encrypt_target_datafiles
+26|110|Data_Guard_health
+27|120|Data_Guard_sync
+28|130|snapshot_readiness
+29|140|switchover_readiness
+30|150|failover_readiness
+31|160|final_validation_report
+32|170|final_validation_gate
 EOF
 }
 
@@ -82,6 +83,9 @@ task_should_skip_condition(){
   fi
   if [[ "$step" == 100 || "$step" == 101 ]]; then
     [[ "${TARGET_RAC_ENABLED:-NO}" != "YES" ]] && return 0
+  fi
+  if [[ "$step" == 105 && "${TDE_ENCRYPTION_MODE:-NONE}" != "TARGET_OFFLINE_AFTER_BUILD" ]]; then
+    return 0
   fi
   return 1
 }
@@ -133,6 +137,7 @@ task_execute_row(){
     090) run_step "$jid" "$step" "$name" dg_srl_ensure ;;
     100) run_step "$jid" "$step" "$name" rac_validate ;;
     101) run_step "$jid" "$step" "$name" rac_enable ;;
+    105) run_step "$jid" "$step" "$name" tde_encrypt_standby_offline ;;
     110) run_step "$jid" "$step" "$name" dg_health ;;
     120) run_step "$jid" "$step" "$name" dg_sync ;;
     130) run_step "$jid" "$step" "$name" snapshot_status ;;

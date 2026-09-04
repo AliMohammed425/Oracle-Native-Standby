@@ -18,6 +18,10 @@ bin/oracle-native-standby
 
 The configuration covers source and target database identities, hosts, Oracle homes, services, listener ports, storage, TDE wallets, RAC settings, backup staging, and operator access policy.
 
+The main menu follows the required build order: target placeholder creation, primary database preparation, and physical standby build on the target. Each phase can run in the foreground or background.
+
+Target TDE tablespace encryption provides two guarded modes: `TARGET_ONLINE_AFTER_SWITCHOVER` for a target that is already primary and open read-write, and `TARGET_OFFLINE_AFTER_BUILD` for mounted target-standby datafile encryption. The source database is never encrypted by these functions.
+
 ## 3. Review the plan
 
 ```bash
@@ -49,6 +53,16 @@ bin/oracle-native-standby -d conf/oracle-native-standby.drv tasks 1-10 --foregro
 bin/oracle-native-standby -d conf/oracle-native-standby.drv steps 005,010,070 --background
 ```
 
+Every registered process is independently available in interactive and non-interactive modes. Select **INDIVIDUAL PROCESSES** from the main menu, or use:
+
+```bash
+bin/oracle-native-standby process-list
+bin/oracle-native-standby -d conf/oracle-native-standby.drv process 10 --foreground
+bin/oracle-native-standby -d conf/oracle-native-standby.drv process 19 --background
+bin/oracle-native-standby -d conf/oracle-native-standby.drv processes 1-10 --foreground
+bin/oracle-native-standby -d conf/oracle-native-standby.drv processes 1,4,7 --background
+```
+
 ## 6. Monitor and resume
 
 ```bash
@@ -67,4 +81,3 @@ bin/oracle-native-standby -d conf/oracle-native-standby.drv sync
 ```
 
 Production execution requires approved change controls, verified backups, tested recovery procedures, validated TDE and password-file handling, and confirmed source-to-target connectivity.
-

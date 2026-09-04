@@ -28,6 +28,72 @@ source "$ONS_ROOT/lib/task_select.sh"
 load_config
 operator_policy_defaults
 
+clear_screen(){
+  if [[ -t 1 ]] && command -v clear >/dev/null 2>&1; then
+    clear
+  else
+    printf '\033[2J\033[H'
+  fi
+}
+
+run_menu_phase(){
+  local label="$1" selector="$2" yn jid
+  interactive_load_default_driver
+  echo
+  echo "$label"
+  read -r -p "Run this phase in background? [Y/N]: " yn
+  if [[ "${yn^^}" == "Y" ]]; then
+    task_submit_background tasks "$selector"
+  else
+    jid="$(new_job_id)"
+    mkdir -p "$(job_dir "$jid")"
+    snapshot_job_config "$jid"
+    task_run_selector "$jid" "$selector"
+    show_job "$jid"
+  fi
+}
+
+phase_placeholder(){
+  run_menu_phase "PHASE 1 - Create or validate target placeholder database" "1,2,3,4,7,8,9,10"
+}
+
+phase_primary_setup(){
+  run_menu_phase "PHASE 2 - Prepare primary database and Data Guard configuration" "5,6,11,14,15"
+}
+
+phase_standby_build(){
+  run_menu_phase "PHASE 3 - Build, optionally encrypt, and validate physical standby on target" "12,13,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32"
+}
+
+interactive_tde_encrypt(){
+  interactive_load_default_driver
+  echo
+  tde_tablespace_status
+  echo
+  echo "1) TARGET_ONLINE_AFTER_SWITCHOVER - target must be PRIMARY and READ WRITE"
+  echo "2) TARGET_OFFLINE_AFTER_BUILD - encrypt target standby datafiles while mounted"
+  echo "0) Cancel"
+  read -r -p "Encryption mode: " mode
+  case "$mode" in
+    1)
+      read -r -p "Type ENCRYPT to start online target encryption: " ack
+      [[ "$ack" == "ENCRYPT" ]] || { echo "Encryption cancelled."; return 0; }
+      TDE_ENCRYPTION_MODE=TARGET_ONLINE_AFTER_SWITCHOVER; export TDE_ENCRYPTION_MODE
+      tde_encrypt_tablespaces
+      ;;
+    2)
+      echo "This stops Redo Apply, encrypts target datafiles while mounted, and restarts apply."
+      read -r -p "Type OFFLINE-ENCRYPT to continue: " ack
+      [[ "$ack" == "OFFLINE-ENCRYPT" ]] || { echo "Encryption cancelled."; return 0; }
+      TDE_ENCRYPTION_MODE=TARGET_OFFLINE_AFTER_BUILD; export TDE_ENCRYPTION_MODE
+      tde_encrypt_standby_offline
+      ;;
+    0) return 0 ;;
+    *) echo "Invalid choice."; return 1 ;;
+  esac
+  read -r -p "Press Enter to continue..." _
+}
+
 usage(){
 cat <<'EOF'
 Oracle-Native-Standby Standby Manager
@@ -43,6 +109,10 @@ Complete build:
 
 Task selection:
   oracle-native-standby task-list
+  oracle-native-standby process-list
+  oracle-native-standby process 10 --foreground
+  oracle-native-standby process 10 --background
+  oracle-native-standby processes 1,4,7 --background
   oracle-native-standby tasks 1
   oracle-native-standby tasks 1,10 --foreground
   oracle-native-standby tasks 1-10 --background
@@ -204,6 +274,7 @@ interactive_load_default_driver(){
 }
 
 interactive_task_runner(){
+  clear_screen
   interactive_load_default_driver
   echo
   task_list
@@ -214,7 +285,7 @@ interactive_task_runner(){
   echo "  1-10     = range task 1 through 10"
   echo "  1,4,7    = selected tasks 1, 4, and 7"
   echo "  all      = all tasks"
-  read -r -p "Task selection: " sel
+  read -r -p "Process selection: " sel
   read -r -p "Run in background? [Y/N]: " yn
   if [[ "${yn^^}" == "Y" ]]; then
     task_submit_background tasks "$sel"
@@ -263,6 +334,7 @@ interactive_failed_from(){
 
 interactive_driver_menu(){
   while true; do
+    clear_screen
     cat <<'EOF'
 
 Driver / Input Menu
@@ -315,6 +387,7 @@ EOF
 
 interactive_jobs_menu(){
   while true; do
+    clear_screen
     cat <<'EOF'
 
 Jobs / Background Tracking
@@ -363,6 +436,7 @@ EOF
 
 interactive_operations_menu(){
   while true; do
+    clear_screen
     cat <<'EOF'
 
 Validation / Operations
@@ -401,24 +475,29 @@ EOF
 
 interactive_menu(){
   while true; do
+    clear_screen
     cat <<'EOF'
 
 ==============================================================
         Oracle-Native-Standby Physical Standby Manager
 ==============================================================
-1) COMPLETE BUILD - interactive inputs / driver -> standby
-2) Run ALL tasks - background
-3) Run ALL tasks - foreground
-4) Run individual task / task range / selected tasks
-5) Run production step ID(s)
-6) Resume from FAILED task through end
-7) Show numbered production task list
-8) Driver / Input management
-9) Jobs / Background tracking
-10) Validation / Operations
-11) Validate ops -> sudo oracle / SSH oracle access
-12) Show complete execution plan
-13) Package self-validation
+1) PHASE 1 - Create/validate target placeholder database
+2) PHASE 2 - Prepare primary database for Data Guard
+3) PHASE 3 - Build physical standby on target
+4) TARGET TDE TABLESPACE ENCRYPTION - online/offline
+5) COMPLETE BUILD - run all phases in sequence
+6) Run ALL tasks - background
+7) Run ALL tasks - foreground
+8) INDIVIDUAL PROCESSES - interactive selection
+9) Run production step ID(s)
+10) Resume from FAILED task through end
+11) Show numbered production task list
+12) Driver / Input management
+13) Jobs / Background tracking
+14) Validation / Operations
+15) Validate opc -> sudo oracle / SSH oracle access
+16) Show complete execution plan
+17) Package self-validation
 0) Exit
 --------------------------------------------------------------
 Task examples:
@@ -431,12 +510,16 @@ Task examples:
 EOF
     read -r -p "Choice: " c
     case "$c" in
-      1) complete_build_wizard ;;
-      2)
+      1) phase_placeholder ;;
+      2) phase_primary_setup ;;
+      3) phase_standby_build ;;
+      4) interactive_tde_encrypt ;;
+      5) complete_build_wizard ;;
+      6)
         interactive_load_default_driver
         submit_all_tasks_background
         ;;
-      3)
+      7)
         interactive_load_default_driver
         jid="$(new_job_id)"
         mkdir -p "$(job_dir "$jid")"
@@ -444,17 +527,18 @@ EOF
         workflow_all_tasks "$jid"
         show_job "$jid"
         ;;
-      4) interactive_task_runner ;;
-      5) interactive_step_runner ;;
-      6) interactive_failed_from ;;
-      7) task_list ;;
-      8) interactive_driver_menu ;;
-      9) interactive_jobs_menu ;;
-      10) interactive_operations_menu ;;
-      11) operator_access_preflight ;;
-      12) all_task_plan ;;
-      13)
+      8) interactive_task_runner ;;
+      9) interactive_step_runner ;;
+      10) interactive_failed_from ;;
+      11) task_list; read -r -p "Press Enter to continue..." _ ;;
+      12) interactive_driver_menu ;;
+      13) interactive_jobs_menu ;;
+      14) interactive_operations_menu ;;
+      15) operator_access_preflight; read -r -p "Press Enter to continue..." _ ;;
+      16) all_task_plan; read -r -p "Press Enter to continue..." _ ;;
+      17)
         "$ONS_ROOT/bin/oracle-native-standby-validate"
+        read -r -p "Press Enter to continue..." _
         ;;
       0) exit 0 ;;
       *) echo "Invalid choice." ;;
@@ -598,8 +682,23 @@ case "$cmd" in
     rc=$?
     exit "$rc"
     ;;
-  task-list) task_list ;;
-  tasks)
+  task-list|process-list) task_list ;;
+  task|process)
+    selector="${1:?Usage: process <N> [--background|--foreground]}"
+    [[ "$selector" =~ ^[0-9]+$ ]] || die "process requires one process number. Use processes for ranges or lists."
+    mode="${2:---foreground}"
+    if [[ "$mode" == "--background" ]]; then
+      task_submit_background tasks "$selector"
+    elif [[ "$mode" == "--foreground" ]]; then
+      jid="$(new_job_id)"; mkdir -p "$(job_dir "$jid")"; snapshot_job_config "$jid"
+      echo "Job ID: $jid"
+      task_run_selector "$jid" "$selector"
+      show_job "$jid"
+    else
+      die "Usage: process <N> [--background|--foreground]"
+    fi
+    ;;
+  tasks|processes)
     selector="${1:?Usage: tasks <N|N,M|N-M|N,N,N|all> [--background|--foreground]}"
     mode="${2:---foreground}"
     if [[ "$mode" == "--background" ]]; then
@@ -773,6 +872,9 @@ case "$cmd" in
     job_meta_set "$jid" state "STOPPED"
     ;;
   access-check) operator_access_preflight ;;
+  tde-status) tde_tablespace_status ;;
+  tde-encrypt-online) TDE_ENCRYPTION_MODE=TARGET_ONLINE_AFTER_SWITCHOVER; export TDE_ENCRYPTION_MODE; tde_encrypt_tablespaces ;;
+  tde-encrypt-offline) TDE_ENCRYPTION_MODE=TARGET_OFFLINE_AFTER_BUILD; export TDE_ENCRYPTION_MODE; tde_encrypt_standby_offline ;;
   precheck)
     precheck_validate_config
     precheck_ssh

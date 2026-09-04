@@ -54,6 +54,13 @@ FULL_BUILD_BACKGROUND=YES
 SOURCE_TDE_WALLET_PATH=
 TARGET_TDE_WALLET_PATH=
 
+# Optional online encryption of permanent user tablespaces on the primary
+# NONE | TARGET_ONLINE_AFTER_SWITCHOVER | TARGET_OFFLINE_AFTER_BUILD
+TDE_ENCRYPTION_MODE=NONE
+TDE_ENCRYPT_ALGORITHM=AES256
+# For a CDB, set the PDB name to encrypt. Leave blank for the current container/non-CDB.
+TDE_ENCRYPT_CONTAINER=
+
 # Optional fixed source archive destination slot
 DG_ARCHIVE_DEST_ID=
 
